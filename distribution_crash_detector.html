@@ -1154,7 +1154,10 @@
         const row = nikkeiByDate.get(date);
         return row && row.hasVolume ? row.volume : null;
       });
-      const topixVolume = nikkeiVolume;
+      const topixVolume = visibleDates.map(date => {
+        const row = topixByDate.get(date);
+        return row && row.hasVolume ? row.volume : null;
+      });
       const nikkeiDMarkers = visibleDates.map(date => {
         const row = nikkeiByDate.get(date);
         return row && row.isDistributionDay ? row.close : null;
@@ -1977,6 +1980,3 @@ loadCsvFromUrl('https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.c
  </script>
 </body>
 </html>
-
-
-

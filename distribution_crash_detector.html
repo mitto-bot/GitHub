@@ -569,7 +569,6 @@
                     <th>Nikkei Close</th>
                     <th>TOPIX Close</th>
                     <th>Nikkei Volume</th>
-                    <th>TOPIX Volume</th>
                     <th>Nikkei DD</th>
                     <th>TOPIX DD</th>
                     <th>同時DD</th>
@@ -633,7 +632,6 @@
       nikkeiChart: null,
       nikkeiVolumeChart: null,
       topixChart: null,
-      topixVolumeChart: null,
       backtestChart: null,
       ddChart: null,
       cumulativeDdChart: null,
@@ -812,7 +810,7 @@
       const topixClose = findHeader(headers, ['topixclose', 'topix']);
       if (!nikkeiClose && !topixClose) return [];
       const nikkeiVol = findHeader(headers, ['nikkeivolume', 'nikkeifutvolume', 'nikkeivol']);
-      const topixVol = findHeader(headers, ['topixvolume', 'topixvol']);
+      const topixVol = nikkeiVol;
       const rows = [];
       records.forEach(row => {
         const date = parseDate(row[dateCol]);
@@ -1156,10 +1154,7 @@
         const row = nikkeiByDate.get(date);
         return row && row.hasVolume ? row.volume : null;
       });
-      const topixVolume = visibleDates.map(date => {
-        const row = topixByDate.get(date);
-        return row && row.hasVolume ? row.volume : null;
-      });
+      const topixVolume = nikkeiVolume;
       const nikkeiDMarkers = visibleDates.map(date => {
         const row = nikkeiByDate.get(date);
         return row && row.isDistributionDay ? row.close : null;
@@ -1188,7 +1183,6 @@
           labels: visibleDates,
           datasets: [
             { type: 'bar', label: 'Nikkei 出来高', data: nikkeiVolume, yAxisID: 'yVolume', backgroundColor: 'rgba(53,182,255,.16)', borderColor: 'rgba(53,182,255,.35)', borderWidth: 1, order: 1, datalabels: barLabelOptions },
-            { type: 'bar', label: 'TOPIX 出来高', data: topixVolume, yAxisID: 'yVolume', backgroundColor: 'rgba(255,159,67,.16)', borderColor: 'rgba(255,159,67,.35)', borderWidth: 1, order: 1, datalabels: barLabelOptions },
             { type: 'line', label: '日経平均先物', data: nikkeiClose, yAxisID: 'yNikkei', borderColor: '#35b6ff', backgroundColor: 'rgba(53,182,255,.12)', borderWidth: 2, pointRadius: 0, tension: .18, order: 2 },
             { type: 'line', label: 'TOPIX先物', data: topixClose, yAxisID: 'yTopix', borderColor: '#ff9f43', backgroundColor: 'rgba(255,159,67,.12)', borderWidth: 2, pointRadius: 0, tension: .18, order: 2 },
             { type: 'scatter', label: 'Nikkei D-Day', data: nikkeiDMarkers, yAxisID: 'yNikkei', borderColor: '#b36bff', backgroundColor: '#b36bff', pointRadius: 6, order: 2 },
@@ -1381,104 +1375,6 @@
       });
     }
 
-    function renderTopixVolumeChart() {
-      destroyChart('topixVolumeChart');
-      if (!state.rows.length || !window.Chart) return;
-      const dates = [...new Set(state.rows.filter(row => row.market === 'topix').map(row => row.dateText))].sort();
-      const visibleDates = dates.slice(-260);
-      const rowsByDate = new Map(state.rows.filter(row => row.market === 'topix').map(row => [row.dateText, row]));
-      const volumeData = visibleDates.map(date => {
-        const row = rowsByDate.get(date);
-        return row && row.hasVolume ? row.volume : null;
-      });
-      const isDDData = visibleDates.map(date => {
-        const row = rowsByDate.get(date);
-        return row ? row.isDistributionDay : false;
-      });
-      const prevVolumes = visibleDates.map((date, i) => {
-        if (i === 0) return null;
-        const prevRow = rowsByDate.get(visibleDates[i - 1]);
-        return prevRow && prevRow.hasVolume ? prevRow.volume : null;
-      });
-
-      const opt = options();
-      const isMobile = window.innerWidth <= 680;
-
-      state.topixVolumeChart = new Chart(document.getElementById('topixVolumeChart'), {
-        type: 'bar',
-        data: {
-          labels: visibleDates,
-          datasets: [
-            {
-              label: 'TOPIX出来高',
-              data: volumeData,
-              backgroundColor: volumeData.map((vol, i) => {
-                if (!Number.isFinite(vol) || !Number.isFinite(prevVolumes[i])) return 'rgba(255,159,67,.55)';
-                const ratio = vol / prevVolumes[i];
-                if (ratio >= 3) return 'rgba(179,107,255,.7)'; // 紫
-                if (ratio >= 2) return 'rgba(255,92,122,.7)'; // 赤
-                if (ratio >= 1.5) return 'rgba(255,200,87,.7)'; // 黄
-                if (isDDData[i]) return 'rgba(255,92,122,.7)'; // DD
-                return 'rgba(255,159,67,.55)';
-              }),
-              borderColor: '#ff9f43',
-              borderWidth: 1
-            }
-          ]
-        },
-        options: {
-          ...chartOptions({
-            scales: {
-              y: { beginAtZero: true, grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#aab4c2' }, title: { display: true, text: '出来高', color: '#aab4c2' } },
-              x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
-            },
-            plugins: {
-              ...chartOptions().plugins,
-              datalabels: opt.volumeLabelsEnabled ? {
-                anchor: 'end',
-                align: 'top',
-                offset: 2,
-                formatter: (value, context) => {
-                  if (!Number.isFinite(value)) return '';
-                  const i = context.dataIndex;
-                  const isDD = isDDData[i];
-                  const prevVol = prevVolumes[i];
-                  return formatVolume(value);
-                },
-                color: (context) => {
-                  const value = context.dataset.data[context.dataIndex];
-                  const i = context.dataIndex;
-                  const isDD = isDDData[i];
-                  const prevVol = prevVolumes[i];
-                  return getVolumeLabelColor(value, prevVol, isDD);
-                },
-                font: (context) => {
-                  const value = context.dataset.data[context.dataIndex];
-                  const i = context.dataIndex;
-                  const isDD = isDDData[i];
-                  const prevVol = prevVolumes[i];
-                  return getVolumeLabelStyle(value, prevVol, isDD, isMobile).font;
-                },
-                textShadow: (context) => {
-                  const value = context.dataset.data[context.dataIndex];
-                  const i = context.dataIndex;
-                  const isDD = isDDData[i];
-                  const prevVol = prevVolumes[i];
-                  const isHighVolume = Number.isFinite(value) && Number.isFinite(prevVol) && (value / prevVol) >= 1.5;
-                  return (isDD || isHighVolume) ? '0 0 4px rgba(255, 92, 122, 0.8)' : 'none';
-                },
-                display: (context) => {
-                  const value = context.dataset.data[context.dataIndex];
-                  return Number.isFinite(value) && opt.volumeLabelsEnabled;
-                }
-              } : false
-            }
-          })
-        },
-        plugins: opt.volumeLabelsEnabled ? [ChartDataLabels] : []
-      });
-    }
-
     function renderVIChart() {
       destroyChart('viChart');
       if (!state.rows.length || (!state.hasNikkeiVI && !state.hasVIX && !state.hasADR) || !window.Chart) return;
@@ -1556,7 +1452,6 @@
           <td>${formatNumber(row.nikkei?.close)}</td>
           <td>${formatNumber(row.topix?.close)}</td>
           <td>${row.nikkei?.hasVolume ? formatNumber(row.nikkei.volume) : 'N/A'}</td>
-          <td>${row.topix?.hasVolume ? formatNumber(row.topix.volume) : 'N/A'}</td>
           <td>${row.nikkei?.isDistributionDay ? '<span class="badge dd">DD</span>' : '<span class="badge ok">-</span>'}</td>
           <td>${row.topix?.isDistributionDay ? '<span class="badge dd">DD</span>' : '<span class="badge ok">-</span>'}</td>
           <td>${row.simultaneous ? '<span class="badge both">同時DD</span>' : '<span class="badge ok">-</span>'}</td>
@@ -2004,7 +1899,6 @@
       destroyChart('nikkeiChart');
       destroyChart('nikkeiVolumeChart');
       destroyChart('topixChart');
-      destroyChart('topixVolumeChart');
       destroyChart('backtestChart');
       destroyChart('ddChart');
       destroyChart('cumulativeDdChart');
@@ -2083,3 +1977,6 @@ loadCsvFromUrl('https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.c
  </script>
 </body>
 </html>
+
+
+

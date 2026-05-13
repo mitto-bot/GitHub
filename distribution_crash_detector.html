@@ -1,0 +1,2081 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>暴落検知ツール（日経平均先物・TOPIX）・改</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1217;
+      --panel: #171c24;
+      --panel-2: #1f2630;
+      --line: #303846;
+      --text: #eef2f8;
+      --muted: #aab4c2;
+      --soft: #768296;
+      --blue: #35b6ff;
+      --orange: #ff9f43;
+      --green: #45d483;
+      --yellow: #ffc857;
+      --red: #ff5c7a;
+      --purple: #b36bff;
+      --shadow: 0 18px 42px rgba(0, 0, 0, .28);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(180deg, rgba(53, 182, 255, .08), transparent 260px), var(--bg);
+      color: var(--text);
+    }
+
+    button, input, select { font: inherit; }
+
+    button {
+      min-height: 38px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--panel-2);
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--blue); }
+    button.primary { background: var(--blue); border-color: var(--blue); color: #061019; font-weight: 700; }
+
+    input, select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #11161d;
+      color: var(--text);
+      padding: 0 10px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .app {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 22px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.18;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 880px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(31, 38, 48, .78);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 340px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel {
+      border-radius: 8px;
+      background: rgba(23, 28, 36, .94);
+      box-shadow: var(--shadow);
+      transition: border-color .12s ease, background .12s ease;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0;
+    }
+
+    .panel-body { padding: 15px; }
+
+    .dropzone {
+      display: grid;
+      place-items: center;
+      min-height: 148px;
+      padding: 20px;
+      border: 1px dashed #536172;
+      border-radius: 8px;
+      background: #121820;
+      color: var(--muted);
+      text-align: center;
+      transition: border-color .12s ease, background .12s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--blue);
+      background: rgba(53, 182, 255, .1);
+      transform: translateY(-1px);
+    }
+
+    .dropzone strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .file-input { display: none; }
+    .controls { display: grid; gap: 12px; margin-top: 14px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+    .hint {
+      margin: 12px 0 0;
+      color: var(--soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .error {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 92, 122, .5);
+      border-radius: 8px;
+      background: rgba(255, 92, 122, .1);
+      color: #ffdce3;
+      line-height: 1.5;
+      font-size: 13px;
+    }
+
+    .loading {
+      display: none;
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 159, 67, .5);
+      border-radius: 8px;
+      background: rgba(255, 159, 67, .1);
+      color: #ffe7cc;
+      line-height: 1.5;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .loading.show {
+      display: block;
+    }
+
+    .main-stack { display: grid; gap: 16px; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      min-height: 92px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .metric .label {
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric .value {
+      font-size: clamp(20px, 2.4vw, 30px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .metric .sub {
+      margin-top: 7px;
+      color: var(--soft);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .metric.nikkei .value { color: var(--blue); }
+    .metric.topix .value { color: var(--orange); }
+    .metric.both .value { color: var(--purple); }
+    .risk-low .value { color: var(--green); }
+    .risk-mid .value { color: var(--yellow); }
+    .risk-high .value, .risk-critical .value { color: var(--red); }
+
+    .chart-wrap { height: 440px; min-height: 310px; }
+    .volume-chart { height: 220px; min-height: 190px; margin-top: 14px; }
+    .mini-chart { height: 230px; }
+    canvas { width: 100% !important; height: 100% !important; }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .tab {
+      min-height: 34px;
+      background: transparent;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #061019;
+      font-weight: 700;
+    }
+
+    .table-wrap {
+      max-height: 430px;
+      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      min-width: 960px;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 10px 11px;
+      border-bottom: 1px solid var(--line);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2),
+    th:nth-child(8), td:nth-child(8) {
+      text-align: left;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #151b23;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    tr.dd-row td { background: rgba(255, 92, 122, .08); }
+    tr.both-row td { background: rgba(179, 107, 255, .11); }
+    tr.signal-row td { background: rgba(255, 200, 87, .08); }
+    tr.crash-yellow-row td { background: rgba(255, 200, 87, .15); }
+    tr.crash-orange-row td { background: rgba(255, 159, 67, .15); }
+    tr.crash-red-row td { background: rgba(255, 92, 122, .15); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #11161d;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .badge.dd { border-color: rgba(255, 92, 122, .5); background: rgba(255, 92, 122, .14); color: #ffdce3; }
+    .badge.nikkei { border-color: rgba(53, 182, 255, .55); background: rgba(53, 182, 255, .14); color: #d9f3ff; }
+    .badge.topix { border-color: rgba(255, 159, 67, .55); background: rgba(255, 159, 67, .14); color: #ffe7cc; }
+    .badge.both { border-color: rgba(179, 107, 255, .62); background: rgba(179, 107, 255, .18); color: #f0e4ff; }
+    .badge.signal { border-color: rgba(255, 200, 87, .55); background: rgba(255, 200, 87, .14); color: #fff4d2; }
+    .badge.ok { border-color: rgba(69, 212, 131, .5); background: rgba(69, 212, 131, .12); color: #d9ffe8; }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 320px;
+      padding: 28px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text);
+      font-size: 17px;
+    }
+
+    .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+
+    .summary-list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .summary-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+    }
+
+    .summary-list li:last-child { border-bottom: 0; }
+    .summary-list strong { color: var(--text); text-align: right; }
+
+    .risk-meter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 16px 0;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+    }
+
+    .meter-bar {
+      flex: 1;
+      display: flex;
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      gap: 2px;
+      background: rgba(0, 0, 0, .2);
+    }
+
+    .meter-segment {
+      flex: 1;
+      height: 100%;
+      transition: opacity .2s ease;
+    }
+
+    .meter-segment.green { background: #45d483; }
+    .meter-segment.yellow { background: #ffc857; }
+    .meter-segment.orange { background: #ff9f43; }
+    .meter-segment.red { background: #ff5c7a; }
+
+    .meter-label {
+      min-width: 80px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    .meter-label.low { color: #45d483; }
+    .meter-label.mid { color: #ffc857; }
+    .meter-label.high { color: #ff9f43; }
+    .meter-label.critical { color: #ff5c7a; }
+
+    .cumulative-chart { height: 280px; margin-top: 14px; }
+
+    .crash-alert {
+      padding: 18px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255, 92, 122, .3), rgba(255, 92, 122, .15));
+      border: 2px solid #ff5c7a;
+      color: #ffdce3;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+
+    .crash-alert.crash-yellow {
+      background: linear-gradient(135deg, rgba(255, 200, 87, .3), rgba(255, 200, 87, .15));
+      border: 2px solid #ffc857;
+      color: #fff4d2;
+    }
+
+    .crash-alert.crash-orange {
+      background: linear-gradient(135deg, rgba(255, 159, 67, .3), rgba(255, 159, 67, .15));
+      border: 2px solid #ff9f43;
+      color: #ffe7cc;
+    }
+
+    .crash-alert.crash-red {
+      background: linear-gradient(135deg, rgba(255, 92, 122, .3), rgba(255, 92, 122, .15));
+      border: 2px solid #ff5c7a;
+      color: #ffdce3;
+    }
+      .grid { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .topbar { flex-direction: column; }
+      .status-pill { align-self: flex-start; }
+    }
+
+    @media (max-width: 680px) {
+      .app { padding: 14px; }
+      .panel-header { align-items: flex-start; flex-direction: column; }
+      .metrics, .two, .split { grid-template-columns: 1fr; }
+      .chart-wrap { height: 350px; }
+      .mini-chart { height: 210px; }
+      .actions button { flex: 1 1 130px; }
+      table { min-width: 880px; font-size: 12px; }
+      th, td { padding: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>暴落検知ツール（日経平均先物・TOPIX）・改</h1>
+        <p class="subtitle">CSVの market 列で Nikkei と TOPIX を判定し、両指数を同時表示します。価格下落と出来高増加からD-Dayを指数別に判定し、同時D-Dayを紫マーカーで表示します。</p>
+      </div>
+      <div class="status-pill" id="dataStatus">データ未読込</div>
+    </header>
+
+    <section class="grid">
+      <aside class="panel">
+        <div class="panel-header"><h2 class="panel-title">CSVアップロード</h2></div>
+        <div class="panel-body">
+          <label class="dropzone" id="dropzone" for="fileInput">
+            <span><strong>CSVをドロップ</strong>またはクリックしてファイルを選択</span>
+          </label>
+          <input class="file-input" id="fileInput" type="file" accept=".csv,text/csv">
+          <p class="hint">推奨列: date, market, close, volume。market=Nikkei は日経先物、market=TOPIX はTOPIX先物として扱います。横持ち列 Nikkei_Fut_Close / TOPIX_Close も読み込み可能です。</p>
+          <div class="error" id="errorBox"></div>
+          <div class="loading" id="loadingBox">CSVを解析中...</div>
+
+          <div class="controls">
+            <label>
+              対象市場
+              <select id="marketSelect">
+                <option value="auto">Nikkei + TOPIX 同時表示</option>
+                <option value="nikkei">日経平均先物のみ</option>
+                <option value="topix">TOPIX先物のみ</option>
+              </select>
+            </label>
+
+            <div class="two">
+              <label>DD下落率しきい値<input id="dropThreshold" type="number" step="0.01" value="-0.20"></label>
+              <label>累積営業日<input id="lookbackDays" type="number" min="5" max="60" step="1" value="20"></label>
+            </div>
+
+            <div class="two">
+              <label>警戒DD数<input id="warningCount" type="number" min="1" max="20" step="1" value="4"></label>
+              <label>危険DD数<input id="dangerCount" type="number" min="1" max="20" step="1" value="6"></label>
+            </div>
+
+            <div class="two">
+              <label>バックテスト後続日数<input id="forwardDays" type="number" min="1" max="60" step="1" value="10"></label>
+              <label>暴落判定下落率<input id="crashThreshold" type="number" step="0.1" value="-5.0"></label>
+            </div>
+
+            <label style="display: flex; align-items: center; gap: 8px;">
+              <input id="volumeLabelsEnabled" type="checkbox" checked>
+              出来高ラベル表示
+            </label>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="sampleBtn" type="button">サンプル読込</button>
+            <button id="reanalyzeBtn" type="button">再分析</button>
+            <button id="clearBtn" type="button">クリア</button>
+          </div>
+
+          <p class="hint">volume 列がある場合は「下落かつ出来高増加」をD-Day条件にします。volume がない横持ち価格CSVでは価格下落のみで暫定判定します。</p>
+        </div>
+      </aside>
+
+      <section class="main-stack">
+        <div class="metrics" id="metrics"></div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">Nikkei / TOPIX 同時チャート</h2>
+            <span class="badge" id="chartMarket">未選択</span>
+          </div>
+          <div class="panel-body">
+            <div class="chart-wrap combined-chart" id="combinedChartBox"><canvas id="combinedChart"></canvas></div>
+            <div class="empty" id="emptyState"><div><strong>CSVを読み込んでください</strong>日付、market、終値、出来高があれば分析できます。</div></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="tabs">
+            <button class="tab active" data-tab="signals" type="button">判定一覧</button>
+            <button class="tab" data-tab="backtest" type="button">バックテスト</button>
+            <button class="tab" data-tab="summary" type="button">集計</button>
+          </div>
+
+          <div class="panel-body" id="signalsPane">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日付</th>
+                    <th>Nikkei Close</th>
+                    <th>TOPIX Close</th>
+                    <th>Nikkei Volume</th>
+                    <th>TOPIX Volume</th>
+                    <th>Nikkei DD</th>
+                    <th>TOPIX DD</th>
+                    <th>同時DD</th>
+                    <th>踏み上げ警戒</th>
+                    <th>Nikkei累積</th>
+                    <th>TOPIX累積</th>
+                  </tr>
+                </thead>
+                <tbody id="signalsTable"></tbody>
+              </table>
+            </div>
+            <div class="chart-wrap" id="viChartBox" style="margin-top: 14px;"><canvas id="viChart"></canvas></div>
+          </div>
+
+          <div class="panel-body" id="backtestPane" hidden>
+            <div class="split">
+              <div class="mini-chart"><canvas id="backtestChart"></canvas></div>
+              <ul class="summary-list" id="backtestSummary"></ul>
+            </div>
+            <div class="table-wrap" style="margin-top:14px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>シグナル日</th>
+                    <th>market</th>
+                    <th>累積DD</th>
+                    <th>当日終値</th>
+                    <th>後続最安値</th>
+                    <th>最大下落率</th>
+                    <th>結果</th>
+                  </tr>
+                </thead>
+                <tbody id="backtestTable"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel-body" id="summaryPane" hidden>
+            <div id="riskMeterContainer"></div>
+            <div class="split">
+              <ul class="summary-list" id="summaryList"></ul>
+              <div class="mini-chart"><canvas id="ddChart"></canvas></div>
+            </div>
+            <div class="cumulative-chart"><canvas id="cumulativeDdChart"></canvas></div>
+          </div>
+        </article>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    // Register Chart.js plugins
+    Chart.register(ChartDataLabels);
+    const state = {
+      rawRows: [],
+      rows: [],
+      backtests: [],
+      simultaneousDates: new Set(),
+      combinedChart: null,
+      nikkeiChart: null,
+      nikkeiVolumeChart: null,
+      topixChart: null,
+      topixVolumeChart: null,
+      backtestChart: null,
+      ddChart: null,
+      cumulativeDdChart: null,
+      viChart: null,
+      hasNikkeiVI: false,
+      hasVIX: false,
+      hasADR: false,
+      autoUpdateInterval: null
+    };
+
+    const els = {
+      fileInput: document.getElementById('fileInput'),
+      dropzone: document.getElementById('dropzone'),
+      dataStatus: document.getElementById('dataStatus'),
+      errorBox: document.getElementById('errorBox'),
+      loadingBox: document.getElementById('loadingBox'),
+      marketSelect: document.getElementById('marketSelect'),
+      dropThreshold: document.getElementById('dropThreshold'),
+      lookbackDays: document.getElementById('lookbackDays'),
+      warningCount: document.getElementById('warningCount'),
+      dangerCount: document.getElementById('dangerCount'),
+      forwardDays: document.getElementById('forwardDays'),
+      crashThreshold: document.getElementById('crashThreshold'),
+      sampleBtn: document.getElementById('sampleBtn'),
+      reanalyzeBtn: document.getElementById('reanalyzeBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      volumeLabelsEnabled: document.getElementById('volumeLabelsEnabled'),
+      emptyState: document.getElementById('emptyState'),
+      combinedChartBox: document.getElementById('combinedChartBox'),
+      chartMarket: document.getElementById('chartMarket'),
+      metrics: document.getElementById('metrics'),
+      signalsTable: document.getElementById('signalsTable'),
+      backtestTable: document.getElementById('backtestTable'),
+      backtestSummary: document.getElementById('backtestSummary'),
+      summaryList: document.getElementById('summaryList')
+    };
+
+    const aliases = {
+      date: ['date', 'datetime', 'time', 'day', '日付', '日時', '年月日'],
+      market: ['market', 'symbol', 'ticker', 'name', '銘柄', '市場', '商品', '指数'],
+      open: ['open', '始値'],
+      high: ['high', '高値'],
+      low: ['low', '安値'],
+      close: ['close', 'last', 'settle', 'settlement', '終値', '清算値', '現在値'],
+      volume: ['volume', 'vol', '出来高', '売買高'],
+      nikkeiVI: ['nikkeivi', 'nikkei_vi', '日経vi', 'nikkeivolatility'],
+      vix: ['vix', 'cboe', 'vix指数'],
+      adr: ['advancedeclineratio', 'advance_decline_ratio', '騰落レシオ', '騰落比率']
+    };
+
+    function toHalfWidth(text) {
+      return String(text || '')
+        .replace(/\u3000/g, ' ')
+        .replace(/[^\uFF01-\uFF5E]/g, s => s)
+        .replace(/[\uFF01-\uFF5E]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
+    }
+
+    function normalizeHeader(value) {
+      return toHalfWidth(String(value || ''))
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[＿_]/g, '');
+    }
+
+    function detectColumns(headers) {
+      const normalized = headers.map(normalizeHeader);
+      const result = {};
+      Object.entries(aliases).forEach(([key, list]) => {
+        const index = normalized.findIndex(header => list.map(normalizeHeader).includes(header));
+        if (index >= 0) result[key] = headers[index];
+      });
+      return result;
+    }
+
+    function detectDelimiter(sample) {
+      const candidates = [',', '\t', ';'];
+      let best = ',';
+      let maxCount = 0;
+      candidates.forEach(delimiter => {
+        const count = sample.split(delimiter).length - 1;
+        if (count > maxCount) {
+          maxCount = count;
+          best = delimiter;
+        }
+      });
+      return best;
+    }
+
+    function splitCsvLine(line, delimiter = ',') {
+      const cells = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const next = line[i + 1];
+        if (char === '"' && inQuotes && next === '"') {
+          current += '"';
+          i++;
+        } else if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === delimiter && !inQuotes) {
+          cells.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      cells.push(current);
+      return cells.map(cell => cell.trim());
+    }
+
+    function parseCsv(text) {
+      const cleanedText = text.replace(/^\uFEFF/, '');
+      const lines = cleanedText.split(/\r?\n/).filter(line => line.trim());
+      if (lines.length < 2) throw new Error('CSVにデータ行がありません。');
+      const delimiter = detectDelimiter(lines[0]);
+      const headers = splitCsvLine(lines[0], delimiter);
+      const cols = detectColumns(headers);
+      const records = lines.slice(1).map((line, index) => {
+        const cells = splitCsvLine(line, delimiter);
+        const row = {};
+        headers.forEach((header, i) => row[header] = cells[i] ?? '');
+        row.__line = index + 2;
+        return row;
+      });
+
+      if (cols.date && cols.market && cols.close) {
+        return parseLongCsv(records, cols);
+      }
+
+      const wideRows = parseWideCsv(headers, records, cols.date);
+      if (wideRows.length) return wideRows;
+      throw new Error('必須列を検出できません。date, market, close を含む縦持ちCSV、または Nikkei_Fut_Close / TOPIX_Close を含む横持ちCSVを指定してください。');
+    }
+
+    function parseLongCsv(records, cols) {
+      return records.map(row => {
+        const date = parseDate(row[cols.date]);
+        const market = normalizeMarket(row[cols.market]);
+        const close = parseNumber(row[cols.close]);
+        const volume = cols.volume ? parseNumber(row[cols.volume]) : NaN;
+        const nikkeiVI = cols.nikkeiVI ? parseNumber(row[cols.nikkeiVI]) : NaN;
+        const vix = cols.vix ? parseNumber(row[cols.vix]) : NaN;
+        const adr = cols.adr ? parseNumber(row[cols.adr]) : NaN;
+        
+        if (!date || !market || !Number.isFinite(close)) return null;
+        
+        // Track if we have these indicators
+        if (Number.isFinite(nikkeiVI)) state.hasNikkeiVI = true;
+        if (Number.isFinite(vix)) state.hasVIX = true;
+        if (Number.isFinite(adr)) state.hasADR = true;
+        
+        return {
+          sourceIndex: row.__line,
+          date,
+          dateText: formatDate(date),
+          market,
+          open: cols.open ? parseNumber(row[cols.open]) : null,
+          high: cols.high ? parseNumber(row[cols.high]) : null,
+          low: cols.low ? parseNumber(row[cols.low]) : null,
+          close,
+          volume: Number.isFinite(volume) ? volume : null,
+          hasVolume: Number.isFinite(volume),
+          nikkeiVI: Number.isFinite(nikkeiVI) ? nikkeiVI : null,
+          vix: Number.isFinite(vix) ? vix : null,
+          adr: Number.isFinite(adr) ? adr : null
+        };
+      }).filter(row => row && (row.market === 'nikkei' || row.market === 'topix'));
+    }
+
+    function parseWideCsv(headers, records, dateColumn) {
+      const dateCol = dateColumn || headers.find(header => normalizeHeader(header) === 'date');
+      if (!dateCol) return [];
+      const nikkeiClose = findHeader(headers, ['nikkeifutclose', 'nikkeiclose', 'nikkei225close', 'nikkei']);
+      const topixClose = findHeader(headers, ['topixclose', 'topix']);
+      if (!nikkeiClose && !topixClose) return [];
+      const nikkeiVol = findHeader(headers, ['nikkeivolume', 'nikkeifutvolume', 'nikkeivol']);
+      const topixVol = findHeader(headers, ['topixvolume', 'topixvol']);
+      const rows = [];
+      records.forEach(row => {
+        const date = parseDate(row[dateCol]);
+        if (!date) return;
+        addWideMarketRow(rows, row, date, 'nikkei', nikkeiClose, nikkeiVol);
+        addWideMarketRow(rows, row, date, 'topix', topixClose, topixVol);
+      });
+      return rows;
+    }
+
+    function addWideMarketRow(rows, row, date, market, closeCol, volumeCol) {
+      if (!closeCol) return;
+      const close = parseNumber(row[closeCol]);
+      if (!Number.isFinite(close)) return;
+      const volume = volumeCol ? parseNumber(row[volumeCol]) : NaN;
+      rows.push({
+        sourceIndex: row.__line,
+        date,
+        dateText: formatDate(date),
+        market,
+        open: null,
+        high: null,
+        low: null,
+        close,
+        volume: Number.isFinite(volume) ? volume : null,
+        hasVolume: Number.isFinite(volume)
+      });
+    }
+
+    function findHeader(headers, candidates) {
+      return headers.find(header => candidates.includes(normalizeHeader(header)));
+    }
+
+    function parseDate(value) {
+      const text = String(value || '').trim();
+      if (!text) return null;
+      const normalized = text.replace(/[年月.]/g, '-').replace(/日/g, '').replace(/\//g, '-');
+      const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      const date = new Date(text);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function parseNumber(value) {
+      const text = String(value || '').trim().replace(/,/g, '').replace(/%/g, '');
+      if (!text || text === '-' || text.toLowerCase() === 'nan') return NaN;
+      return Number(text);
+    }
+
+    function formatDate(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function normalizeMarket(value) {
+      const text = toHalfWidth(String(value || '')).trim();
+      const lower = text.toLowerCase().replace(/\s+/g, '');
+      if (/^(?:topix|topx|tpx|トピックス|トピックス先物|topix先物|topix指数|topix先物|topix指数)$/.test(lower) || /topix/.test(lower)) return 'topix';
+      if (/^(?:nikkei|日経|nk|225|日経平均|日経225|日経先物|nikkei先物|nikkei225)$/.test(lower) || /日経/.test(lower)) return 'nikkei';
+      return '';
+    }
+
+    function marketLabel(market) {
+      if (market === 'nikkei') return '日経平均先物';
+      if (market === 'topix') return 'TOPIX先物';
+      return '市場未指定';
+    }
+
+    function ddTypeLabel(row) {
+      if (!row.isDistributionDay) return '-';
+      if (row.isSimultaneousDay) return '同時D-Day';
+      return row.market === 'nikkei' ? 'Nikkei D-Day' : 'TOPIX D-Day';
+    }
+
+    function ddBadge(row) {
+      if (!row.isDistributionDay) return '<span class="badge ok">-</span>';
+      if (row.isSimultaneousDay) return '<span class="badge both">同時D-Day</span>';
+      const cls = row.market === 'nikkei' ? 'nikkei' : 'topix';
+      return `<span class="badge ${cls}">${ddTypeLabel(row)}</span>`;
+    }
+
+    function options() {
+      return {
+        market: els.marketSelect.value,
+        dropThreshold: Number(els.dropThreshold.value),
+        lookbackDays: Math.max(5, Number(els.lookbackDays.value) || 20),
+        warningCount: Math.max(1, Number(els.warningCount.value) || 4),
+        dangerCount: Math.max(1, Number(els.dangerCount.value) || 6),
+        forwardDays: Math.max(1, Number(els.forwardDays.value) || 10),
+        crashThreshold: Number(els.crashThreshold.value),
+        volumeLabelsEnabled: els.volumeLabelsEnabled.checked
+      };
+    }
+
+    // CSVファイルを解析し、データを処理するメイン関数
+    function analyze() {
+      hideError();
+      state.hasNikkeiVI = false;
+      state.hasVIX = false;
+      state.hasADR = false;
+      const opt = options();
+      const selected = opt.market === 'auto' ? null : opt.market;
+      const grouped = new Map();
+
+      state.rawRows.forEach(row => {
+        if (selected && row.market !== selected) return;
+        if (!grouped.has(row.market)) grouped.set(row.market, []);
+        grouped.get(row.market).push(row);
+      });
+
+      const analyzed = [];
+      grouped.forEach(rows => {
+        rows.sort((a, b) => a.date - b.date);
+        const marketRows = [];
+        rows.forEach((row, i) => {
+          const prev = rows[i - 1];
+          const pctChange = prev ? ((row.close - prev.close) / prev.close) * 100 : 0;
+          const volumeChange = prev && row.hasVolume && prev.hasVolume && prev.volume ? ((row.volume - prev.volume) / prev.volume) * 100 : null;
+          const volumeOk = row.hasVolume && prev && prev.hasVolume ? row.volume > prev.volume : true;
+          const isDistributionDay = Boolean(prev && pctChange <= opt.dropThreshold && volumeOk);
+          const from = Math.max(0, i - opt.lookbackDays + 1);
+          const windowRows = marketRows.slice(from, i).concat({ isDistributionDay });
+          const ddCount = windowRows.filter(item => item.isDistributionDay).length;
+          const risk = riskFromCount(ddCount, opt.warningCount, opt.dangerCount);
+          const crashAlert = crashAlertLevel(pctChange);
+          
+          const analyzedRow = { ...row, pctChange, volumeChange, isDistributionDay, ddCount, risk, crashAlert, isSimultaneousDay: false };
+          marketRows.push(analyzedRow);
+          analyzed.push(analyzedRow);
+        });
+      });
+
+      const ddByDate = groupBy(analyzed.filter(row => row.isDistributionDay), row => row.dateText);
+      state.simultaneousDates = new Set();
+      ddByDate.forEach((rows, dateText) => {
+        const markets = new Set(rows.map(row => row.market));
+        if (markets.has('nikkei') && markets.has('topix')) state.simultaneousDates.add(dateText);
+      });
+      analyzed.forEach(row => row.isSimultaneousDay = row.isDistributionDay && state.simultaneousDates.has(row.dateText));
+
+      // SQ踏み上げ警戒シグナルを追加
+      analyzed.forEach(row => {
+        const prev = analyzed.find(r => r.market === row.market && r.dateText === analyzed.filter(r2 => r2.market === row.market && r2.date < row.date).sort((a,b)=>b.date-a.date)[0]?.dateText);
+        const topixPrev = row.market === 'nikkei' ? analyzed.find(r => r.market === 'topix' && r.dateText === prev?.dateText) : null;
+        const nikkeiPrev = row.market === 'topix' ? analyzed.find(r => r.market === 'nikkei' && r.dateText === prev?.dateText) : null;
+        row.squeezeAlert = detectSqueezeAlert(row, prev, topixPrev, nikkeiPrev);
+      });
+
+      analyzed.sort((a, b) => a.date - b.date || a.market.localeCompare(b.market));
+      state.rows = analyzed;
+      state.backtests = buildBacktests(analyzed, opt);
+      render();
+    }
+
+    function riskFromCount(count, warning, danger) {
+      if (count >= danger) return { key: 'critical', label: '危険', className: 'risk-critical' };
+      if (count >= warning) return { key: 'high', label: '警戒', className: 'risk-high' };
+      if (count >= Math.max(2, warning - 1)) return { key: 'mid', label: '注意', className: 'risk-mid' };
+      return { key: 'low', label: '平常', className: 'risk-low' };
+    }
+
+    // 前日比下落率に応じた暴落警戒レベルを判定
+    function crashAlertLevel(pctChange) {
+      if (!Number.isFinite(pctChange)) return null;
+      if (pctChange <= -4) return { key: 'red', label: '赤色警戒', className: 'crash-red', icon: '🔴' };
+      if (pctChange <= -3) return { key: 'orange', label: 'オレンジ警戒', className: 'crash-orange', icon: '🟠' };
+      if (pctChange <= -2) return { key: 'yellow', label: '黄色警戒', className: 'crash-yellow', icon: '🟡' };
+      return null;
+    }
+
+    // SQ踏み上げ警戒シグナルを検出
+    function detectSqueezeAlert(row, prev, topixPrev, nikkeiPrev) {
+      if (!row || !prev) return null;
+      
+      const conditions = {
+        volumeSpike: row.hasVolume && prev.hasVolume && row.volume > prev.volume * 1.5, // 出来高急増
+        bullishCandle: row.close > row.open, // 陽線
+        nearDD: row.ddCount >= 3, // D-Day付近（累積DD3以上）
+        topixLeading: topixPrev && row.market === 'nikkei' && topixPrev.pctChange > 0 && row.pctChange > topixPrev.pctChange, // TOPIX先行上昇
+        nikkeiRebound: prev.pctChange < -2 && row.pctChange > 0 // Nikkei急反発
+      };
+      
+      const metConditions = Object.values(conditions).filter(Boolean).length;
+      if (metConditions >= 3) { // 3つ以上の条件を満たす場合
+        return { active: true, conditions, metConditions };
+      }
+      return null;
+    }
+
+    function buildBacktests(rows, opt) {
+      const tests = [];
+      groupBy(rows, row => row.market).forEach((marketRows, market) => {
+        const sorted = [...marketRows].sort((a, b) => a.date - b.date);
+        sorted.forEach((row, i) => {
+          if (row.ddCount < opt.warningCount) return;
+          const prev = sorted[i - 1];
+          if (prev && prev.ddCount >= opt.warningCount) return;
+          const future = sorted.slice(i + 1, i + 1 + opt.forwardDays);
+          if (!future.length) return;
+          const minClose = Math.min(...future.map(item => item.close));
+          const maxDrop = ((minClose - row.close) / row.close) * 100;
+          tests.push({ dateText: row.dateText, market, ddCount: row.ddCount, close: row.close, minClose, maxDrop, hit: maxDrop <= opt.crashThreshold });
+        });
+      });
+      return tests;
+    }
+
+    function groupBy(items, keyFn) {
+      const map = new Map();
+      items.forEach(item => {
+        const key = keyFn(item);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(item);
+      });
+      return map;
+    }
+
+    function render() {
+      console.log('render() called');
+      const hasData = state.rows.length > 0;
+      els.emptyState.hidden = hasData;
+      els.combinedChartBox.hidden = !hasData;
+      els.dataStatus.textContent = hasData ? `${state.rows.length.toLocaleString()}件 読込済み` : 'データ未読込';
+      els.chartMarket.textContent = selectedMarketLabel();
+      renderMetrics();
+      renderCombinedChart();
+      renderVIChart();
+      renderSignalsTable();
+      renderBacktest();
+      renderSummary();
+    }
+
+    function selectedMarketLabel() {
+      if (els.marketSelect.value === 'nikkei') return '日経平均先物';
+      if (els.marketSelect.value === 'topix') return 'TOPIX先物';
+      return 'Nikkei / TOPIX';
+    }
+
+    function latestFor(market) {
+      const rows = state.rows.filter(row => row.market === market);
+      return rows.length ? rows.at(-1) : null;
+    }
+
+    function renderMetrics() {
+      const nikkei = latestFor('nikkei');
+      const topix = latestFor('topix');
+      const latest = [nikkei, topix].filter(Boolean).sort((a, b) => b.ddCount - a.ddCount || b.date - a.date)[0];
+      const hits = state.backtests.filter(test => test.hit).length;
+      const hitRate = state.backtests.length ? `${((hits / state.backtests.length) * 100).toFixed(1)}%` : '-';
+      
+      // Calculate crash alert
+      const crashAlert = calculateCrashAlert(nikkei, topix);
+      
+      const crashAlertHtml = crashAlert.active ? `<div class="crash-alert">🚨 暴落警戒 - 価格下落率が一定以上です</div>` : '';
+      
+      // 暴落警戒レベル表示
+      const latestCrashAlert = [nikkei, topix].filter(Boolean).sort((a, b) => (b.crashAlert ? 1 : 0) - (a.crashAlert ? 1 : 0) || b.ddCount - a.ddCount || b.date - a.date)[0];
+      const crashLevelHtml = latestCrashAlert?.crashAlert ? `<div class="crash-alert ${latestCrashAlert.crashAlert.className}">${latestCrashAlert.crashAlert.icon} ${latestCrashAlert.crashAlert.label} - ${marketLabel(latestCrashAlert.market)} 前日比 ${formatPct(latestCrashAlert.pctChange)}</div>` : '';
+      
+      els.metrics.innerHTML = crashAlertHtml + crashLevelHtml + `
+        <div class="metric ${latest ? latest.risk.className : ''}">
+          <div class="label">現在リスク</div>
+          <div class="value">${latest ? latest.risk.label : '-'}</div>
+          <div class="sub">${latest ? `${marketLabel(latest.market)} / ${latest.dateText}` : 'CSV読込後に表示'}</div>
+        </div>
+        <div class="metric nikkei">
+          <div class="label">Nikkei DD累積</div>
+          <div class="value">${nikkei ? nikkei.ddCount : '-'}</div>
+          <div class="sub">${nikkei ? `${formatNumber(nikkei.close)} / ${formatPct(nikkei.pctChange)}` : '日経平均先物'}</div>
+        </div>
+        <div class="metric topix">
+          <div class="label">TOPIX DD累積</div>
+          <div class="value">${topix ? topix.ddCount : '-'}</div>
+          <div class="sub">${topix ? `${formatNumber(topix.close)} / ${formatPct(topix.pctChange)}` : 'TOPIX先物'}</div>
+        </div>
+        <div class="metric both">
+          <div class="label">同時DD回数</div>
+          <div class="value">${state.simultaneousDates.size || '-'}</div>
+          <div class="sub">${options().lookbackDays}営業日累積 / 全期間同時日</div>
+        </div>
+        <div class="metric">
+          <div class="label">バックテスト的中率</div>
+          <div class="value">${hitRate}</div>
+          <div class="sub">${state.backtests.length}シグナル / ${hits}的中</div>
+        </div>
+        ${state.hasNikkeiVI ? `<div class="metric"><div class="label">日経VI</div><div class="value ${getNikkeiVIStatus(nikkei?.nikkeiVI)}">${nikkei?.nikkeiVI ? formatNumber(nikkei.nikkeiVI) : '-'}</div><div class="sub">20以上で警戒</div></div>` : ''}
+        ${state.hasVIX ? `<div class="metric"><div class="label">米国VIX</div><div class="value ${getVIXStatus(topix?.vix)}">${topix?.vix ? formatNumber(topix.vix) : '-'}</div><div class="sub">25以上で警戒</div></div>` : ''}
+        ${state.hasADR ? `<div class="metric"><div class="label">騰落レシオ</div><div class="value ${getADRStatus(nikkei?.adr)}">${nikkei?.adr ? formatNumber(nikkei.adr) : '-'}</div><div class="sub">70以下で警戒</div></div>` : ''}
+      `;
+    }
+    
+    function calculateCrashAlert(nikkei, topix) {
+      let count = 0;
+      if (nikkei?.ddCount >= 5 || topix?.ddCount >= 5) count++;
+      if (state.simultaneousDates.size >= 3) count++;
+      if (nikkei?.nikkeiVI >= 25) count++;
+      if (topix?.vix >= 30) count++;
+      if (nikkei?.adr <= 70) count++;
+      return { active: count >= 2, count };
+    }
+    
+    function getNikkeiVIStatus(value) {
+      if (!Number.isFinite(value)) return '';
+      if (value >= 30) return 'risk-critical';
+      if (value >= 20) return 'risk-high';
+      return 'risk-low';
+    }
+    
+    function getVIXStatus(value) {
+      if (!Number.isFinite(value)) return '';
+      if (value >= 35) return 'risk-critical';
+      if (value >= 25) return 'risk-high';
+      return 'risk-low';
+    }
+    
+    function getADRStatus(value) {
+      if (!Number.isFinite(value)) return '';
+      if (value <= 60) return 'risk-critical';
+      if (value <= 70) return 'risk-high';
+      return 'risk-low';
+    }
+
+    function renderCombinedChart() {
+      console.log('renderCombinedChart called');
+      destroyChart('combinedChart');
+      if (!state.rows.length || !window.Chart) return;
+
+      console.log('ChartDataLabels:', ChartDataLabels);
+
+      const opt = options();
+      const dates = [...new Set(state.rows.map(row => row.dateText))].sort();
+      const visibleDates = dates.slice(-260);
+      const nikkeiByDate = new Map(state.rows.filter(row => row.market === 'nikkei').map(row => [row.dateText, row]));
+      const topixByDate = new Map(state.rows.filter(row => row.market === 'topix').map(row => [row.dateText, row]));
+
+      const nikkeiClose = visibleDates.map(date => nikkeiByDate.get(date)?.close ?? null);
+      const topixClose = visibleDates.map(date => topixByDate.get(date)?.close ?? null);
+      const nikkeiVolume = visibleDates.map(date => {
+        const row = nikkeiByDate.get(date);
+        return row && row.hasVolume ? row.volume : null;
+      });
+      const topixVolume = visibleDates.map(date => {
+        const row = topixByDate.get(date);
+        return row && row.hasVolume ? row.volume : null;
+      });
+      const nikkeiDMarkers = visibleDates.map(date => {
+        const row = nikkeiByDate.get(date);
+        return row && row.isDistributionDay ? row.close : null;
+      });
+      const topixDMarkers = visibleDates.map(date => {
+        const row = topixByDate.get(date);
+        return row && row.isDistributionDay ? row.close : null;
+      });
+
+      const barLabelOptions = {
+        anchor: 'end',
+        align: 'top',
+        offset: 4,
+        display: true,
+        clip: false,
+        clamp: true,
+        color: '#ffffff',
+        font: { size: 10, weight: 'bold' },
+        textStrokeColor: '#000000',
+        textStrokeWidth: 2,
+        formatter: (value) => formatVolume(value)
+      };
+
+      state.combinedChart = new Chart(document.getElementById('combinedChart'), {
+        data: {
+          labels: visibleDates,
+          datasets: [
+            { type: 'bar', label: 'Nikkei 出来高', data: nikkeiVolume, yAxisID: 'yVolume', backgroundColor: 'rgba(53,182,255,.16)', borderColor: 'rgba(53,182,255,.35)', borderWidth: 1, order: 1, datalabels: barLabelOptions },
+            { type: 'bar', label: 'TOPIX 出来高', data: topixVolume, yAxisID: 'yVolume', backgroundColor: 'rgba(255,159,67,.16)', borderColor: 'rgba(255,159,67,.35)', borderWidth: 1, order: 1, datalabels: barLabelOptions },
+            { type: 'line', label: '日経平均先物', data: nikkeiClose, yAxisID: 'yNikkei', borderColor: '#35b6ff', backgroundColor: 'rgba(53,182,255,.12)', borderWidth: 2, pointRadius: 0, tension: .18, order: 2 },
+            { type: 'line', label: 'TOPIX先物', data: topixClose, yAxisID: 'yTopix', borderColor: '#ff9f43', backgroundColor: 'rgba(255,159,67,.12)', borderWidth: 2, pointRadius: 0, tension: .18, order: 2 },
+            { type: 'scatter', label: 'Nikkei D-Day', data: nikkeiDMarkers, yAxisID: 'yNikkei', borderColor: '#b36bff', backgroundColor: '#b36bff', pointRadius: 6, order: 2 },
+            { type: 'scatter', label: 'TOPIX D-Day', data: topixDMarkers, yAxisID: 'yTopix', borderColor: '#7f5cff', backgroundColor: '#7f5cff', pointRadius: 6, order: 2 }
+          ]
+        },
+        plugins: [ChartDataLabels],
+        options: chartOptions({
+          layout: { padding: { top: 40 } },
+          scales: {
+            yNikkei: {
+              type: 'linear',
+              position: 'left',
+              grid: { color: 'rgba(48,56,70,.75)' },
+              ticks: { color: '#eef2f8' },
+              title: { display: true, text: 'Nikkei 価格', color: '#eef2f8' }
+            },
+            yTopix: {
+              type: 'linear',
+              position: 'right',
+              grid: { drawOnChartArea: false },
+              ticks: { color: '#ff9f43' },
+              title: { display: true, text: 'TOPIX 価格', color: '#ff9f43' }
+            },
+            yVolume: {
+              type: 'linear',
+              display: false,
+              beginAtZero: true
+            },
+            x: {
+              grid: { color: 'rgba(48,56,70,.38)' },
+              ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 }
+            }
+          },
+          plugins: {
+            ...chartOptions().plugins,
+            datalabels: { clip: false, clamp: true }
+          }
+        })
+      });
+    }
+
+    function renderTopixChart() {
+      destroyChart('topixChart');
+      if (!state.rows.length || !window.Chart) return;
+      const dates = [...new Set(state.rows.filter(row => row.market === 'topix').map(row => row.dateText))].sort();
+      const visibleDates = dates.slice(-260);
+      const rowsByDate = new Map(state.rows.filter(row => row.market === 'topix').map(row => [row.dateText, row]));
+      const closeData = visibleDates.map(date => rowsByDate.get(date)?.close ?? null);
+      const ddMarkers = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row && row.isDistributionDay ? row.close : null;
+      });
+      const highVolumeMarkers = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        if (!row || !row.hasVolume) return null;
+        const prev = dates.indexOf(date) > 0 ? rowsByDate.get(dates[dates.indexOf(date) - 1]) : null;
+        const isHighVolume = prev && row.volume > prev.volume * 1.3;
+        return isHighVolume ? row.close : null;
+      });
+      const crashAlerts = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        if (row?.crashAlert) {
+          return { date, level: row.crashAlert.key };
+        }
+        return null;
+      }).filter(Boolean);
+      const squeezeAlerts = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row?.squeezeAlert ? row.close : null;
+      });
+
+      state.topixChart = new Chart(document.getElementById('topixChart'), {
+        data: {
+          labels: visibleDates,
+          datasets: [
+            { type: 'line', label: 'TOPIX先物', data: closeData, borderColor: '#ff9f43', backgroundColor: 'rgba(255,159,67,.12)', borderWidth: 2, pointRadius: 0, tension: .18, yAxisID: 'y' },
+            { type: 'scatter', label: 'D-Day（紫）', data: ddMarkers, borderColor: '#b36bff', backgroundColor: '#b36bff', pointRadius: 7, pointHoverRadius: 9, yAxisID: 'y' },
+            { type: 'scatter', label: '出来高急増（赤）', data: highVolumeMarkers, borderColor: '#ff5c7a', backgroundColor: '#ff5c7a', pointRadius: 5, pointHoverRadius: 7, yAxisID: 'y' },
+            { type: 'scatter', label: 'SQ踏み上げ警戒（紫赤）', data: squeezeAlerts, borderColor: '#b36bff', backgroundColor: '#ff5c7a', pointRadius: 6, pointHoverRadius: 8, yAxisID: 'y' }
+          ]
+        },
+        options: chartOptions({
+          crashAlerts,
+          scales: {
+            y: { type: 'linear', grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#ff9f43' }, title: { display: true, text: 'TOPIX先物', color: '#ff9f43' } },
+            x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
+          }
+        })
+      });
+    }
+
+    function renderNikkeiVolumeChart() {
+      destroyChart('nikkeiVolumeChart');
+      if (!state.rows.length || !window.Chart) return;
+      const dates = [...new Set(state.rows.filter(row => row.market === 'nikkei').map(row => row.dateText))].sort();
+      const visibleDates = dates.slice(-260);
+      const rowsByDate = new Map(state.rows.filter(row => row.market === 'nikkei').map(row => [row.dateText, row]));
+      const volumeData = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row && row.hasVolume ? row.volume : null;
+      });
+      const isDDData = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row ? row.isDistributionDay : false;
+      });
+      const prevVolumes = visibleDates.map((date, i) => {
+        if (i === 0) return null;
+        const prevRow = rowsByDate.get(visibleDates[i - 1]);
+        return prevRow && prevRow.hasVolume ? prevRow.volume : null;
+      });
+
+      const opt = options();
+      const isMobile = window.innerWidth <= 680;
+
+      state.nikkeiVolumeChart = new Chart(document.getElementById('nikkeiVolumeChart'), {
+        type: 'bar',
+        data: {
+          labels: visibleDates,
+          datasets: [
+            {
+              label: '日経出来高',
+              data: volumeData,
+              backgroundColor: volumeData.map((vol, i) => {
+                if (!Number.isFinite(vol) || !Number.isFinite(prevVolumes[i])) return 'rgba(53,182,255,.55)';
+                const ratio = vol / prevVolumes[i];
+                if (ratio >= 3) return 'rgba(179,107,255,.7)'; // 紫
+                if (ratio >= 2) return 'rgba(255,92,122,.7)'; // 赤
+                if (ratio >= 1.5) return 'rgba(255,200,87,.7)'; // 黄
+                if (isDDData[i]) return 'rgba(255,92,122,.7)'; // DD
+                return 'rgba(53,182,255,.55)';
+              }),
+              borderColor: '#35b6ff',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          ...chartOptions({
+            scales: {
+              y: { beginAtZero: true, grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#aab4c2' }, title: { display: true, text: '出来高', color: '#aab4c2' } },
+              x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
+            },
+            plugins: {
+              ...chartOptions().plugins,
+              datalabels: opt.volumeLabelsEnabled ? {
+                anchor: 'end',
+                align: 'top',
+                offset: 2,
+                formatter: (value, context) => {
+                  if (!Number.isFinite(value)) return '';
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  const style = getVolumeLabelStyle(value, prevVol, isDD, isMobile);
+                  return formatVolume(value);
+                },
+                color: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  return getVolumeLabelColor(value, prevVol, isDD);
+                },
+                font: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  const isMobile = window.innerWidth <= 680;
+                  return getVolumeLabelStyle(value, prevVol, isDD, isMobile).font;
+                },
+                textShadow: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  const isHighVolume = Number.isFinite(value) && Number.isFinite(prevVol) && (value / prevVol) >= 1.5;
+                  return (isDD || isHighVolume) ? '0 0 4px rgba(255, 92, 122, 0.8)' : 'none';
+                },
+                display: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  return Number.isFinite(value) && opt.volumeLabelsEnabled;
+                }
+              } : false
+            }
+          })
+        },
+        plugins: opt.volumeLabelsEnabled ? [ChartDataLabels] : []
+      });
+    }
+
+    function renderTopixVolumeChart() {
+      destroyChart('topixVolumeChart');
+      if (!state.rows.length || !window.Chart) return;
+      const dates = [...new Set(state.rows.filter(row => row.market === 'topix').map(row => row.dateText))].sort();
+      const visibleDates = dates.slice(-260);
+      const rowsByDate = new Map(state.rows.filter(row => row.market === 'topix').map(row => [row.dateText, row]));
+      const volumeData = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row && row.hasVolume ? row.volume : null;
+      });
+      const isDDData = visibleDates.map(date => {
+        const row = rowsByDate.get(date);
+        return row ? row.isDistributionDay : false;
+      });
+      const prevVolumes = visibleDates.map((date, i) => {
+        if (i === 0) return null;
+        const prevRow = rowsByDate.get(visibleDates[i - 1]);
+        return prevRow && prevRow.hasVolume ? prevRow.volume : null;
+      });
+
+      const opt = options();
+      const isMobile = window.innerWidth <= 680;
+
+      state.topixVolumeChart = new Chart(document.getElementById('topixVolumeChart'), {
+        type: 'bar',
+        data: {
+          labels: visibleDates,
+          datasets: [
+            {
+              label: 'TOPIX出来高',
+              data: volumeData,
+              backgroundColor: volumeData.map((vol, i) => {
+                if (!Number.isFinite(vol) || !Number.isFinite(prevVolumes[i])) return 'rgba(255,159,67,.55)';
+                const ratio = vol / prevVolumes[i];
+                if (ratio >= 3) return 'rgba(179,107,255,.7)'; // 紫
+                if (ratio >= 2) return 'rgba(255,92,122,.7)'; // 赤
+                if (ratio >= 1.5) return 'rgba(255,200,87,.7)'; // 黄
+                if (isDDData[i]) return 'rgba(255,92,122,.7)'; // DD
+                return 'rgba(255,159,67,.55)';
+              }),
+              borderColor: '#ff9f43',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          ...chartOptions({
+            scales: {
+              y: { beginAtZero: true, grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#aab4c2' }, title: { display: true, text: '出来高', color: '#aab4c2' } },
+              x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
+            },
+            plugins: {
+              ...chartOptions().plugins,
+              datalabels: opt.volumeLabelsEnabled ? {
+                anchor: 'end',
+                align: 'top',
+                offset: 2,
+                formatter: (value, context) => {
+                  if (!Number.isFinite(value)) return '';
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  return formatVolume(value);
+                },
+                color: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  return getVolumeLabelColor(value, prevVol, isDD);
+                },
+                font: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  return getVolumeLabelStyle(value, prevVol, isDD, isMobile).font;
+                },
+                textShadow: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  const i = context.dataIndex;
+                  const isDD = isDDData[i];
+                  const prevVol = prevVolumes[i];
+                  const isHighVolume = Number.isFinite(value) && Number.isFinite(prevVol) && (value / prevVol) >= 1.5;
+                  return (isDD || isHighVolume) ? '0 0 4px rgba(255, 92, 122, 0.8)' : 'none';
+                },
+                display: (context) => {
+                  const value = context.dataset.data[context.dataIndex];
+                  return Number.isFinite(value) && opt.volumeLabelsEnabled;
+                }
+              } : false
+            }
+          })
+        },
+        plugins: opt.volumeLabelsEnabled ? [ChartDataLabels] : []
+      });
+    }
+
+    function renderVIChart() {
+      destroyChart('viChart');
+      if (!state.rows.length || (!state.hasNikkeiVI && !state.hasVIX && !state.hasADR) || !window.Chart) return;
+      
+      const dates = [...new Set(state.rows.map(row => row.dateText))].sort();
+      const visibleDates = dates.slice(-260);
+      const rowsByMarketDate = new Map(state.rows.map(row => [`${row.market}:${row.dateText}`, row]));
+      
+      const datasets = [];
+      
+      if (state.hasNikkeiVI) {
+        const nikkeiVIData = visibleDates.map(date => {
+          const row = rowsByMarketDate.get(`nikkei:${date}`);
+          return row ? row.nikkeiVI : null;
+        });
+        datasets.push({ label: '日経VI', data: nikkeiVIData, borderColor: '#35b6ff', backgroundColor: 'rgba(53,182,255,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0, yAxisID: 'yVI' });
+      }
+      
+      if (state.hasVIX) {
+        const vixData = visibleDates.map(date => {
+          const row = rowsByMarketDate.get(`topix:${date}`);
+          return row ? row.vix : null;
+        });
+        datasets.push({ label: '米国VIX', data: vixData, borderColor: '#ff9f43', backgroundColor: 'rgba(255,159,67,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0, yAxisID: 'yVIX' });
+      }
+      
+      if (state.hasADR) {
+        const adrData = visibleDates.map(date => {
+          const row = rowsByMarketDate.get(`nikkei:${date}`);
+          return row ? row.adr : null;
+        });
+        datasets.push({ label: '騰落レシオ', data: adrData, borderColor: '#b36bff', backgroundColor: 'rgba(179,107,255,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0, yAxisID: 'yADR' });
+      }
+      
+      state.viChart = new Chart(document.getElementById('viChart'), {
+        type: 'line',
+        data: { labels: visibleDates, datasets },
+        options: chartOptions({
+          scales: {
+            yVI: state.hasNikkeiVI ? { type: 'linear', position: 'left', grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#35b6ff' }, title: { display: true, text: '日経VI', color: '#35b6ff' } } : undefined,
+            yVIX: state.hasVIX ? { type: 'linear', position: state.hasNikkeiVI ? 'right' : 'left', grid: { drawOnChartArea: !state.hasNikkeiVI }, ticks: { color: '#ff9f43' }, title: { display: true, text: '米国VIX', color: '#ff9f43' } } : undefined,
+            yADR: state.hasADR ? { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#b36bff' }, title: { display: true, text: '騰落レシオ', color: '#b36bff' } } : undefined,
+            x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
+          }
+        })
+      });
+    }
+
+    function dailySignalRows() {
+      const dates = [...new Set(state.rows.map(row => row.dateText))].sort().reverse();
+      const rowsByMarketDate = new Map(state.rows.map(row => [`${row.market}:${row.dateText}`, row]));
+      return dates.map(date => {
+        const nikkei = rowsByMarketDate.get(`nikkei:${date}`);
+        const topix = rowsByMarketDate.get(`topix:${date}`);
+        return {
+          date,
+          nikkei,
+          topix,
+          simultaneous: Boolean(nikkei?.isDistributionDay && topix?.isDistributionDay)
+        };
+      });
+    }
+
+    function renderSignalsTable() {
+      const rows = dailySignalRows().slice(0, 400);
+      els.signalsTable.innerHTML = rows.map(row => {
+        let rowClass = '';
+        if (row.simultaneous) rowClass = 'both-row';
+        else if (row.nikkei?.isDistributionDay || row.topix?.isDistributionDay) rowClass = 'dd-row';
+        else if (row.nikkei?.crashAlert || row.topix?.crashAlert) rowClass = `crash-${(row.nikkei?.crashAlert || row.topix?.crashAlert).key}-row`;
+        
+        return `
+        <tr class="${rowClass}">
+          <td>${row.date}</td>
+          <td>${formatNumber(row.nikkei?.close)}</td>
+          <td>${formatNumber(row.topix?.close)}</td>
+          <td>${row.nikkei?.hasVolume ? formatNumber(row.nikkei.volume) : 'N/A'}</td>
+          <td>${row.topix?.hasVolume ? formatNumber(row.topix.volume) : 'N/A'}</td>
+          <td>${row.nikkei?.isDistributionDay ? '<span class="badge dd">DD</span>' : '<span class="badge ok">-</span>'}</td>
+          <td>${row.topix?.isDistributionDay ? '<span class="badge dd">DD</span>' : '<span class="badge ok">-</span>'}</td>
+          <td>${row.simultaneous ? '<span class="badge both">同時DD</span>' : '<span class="badge ok">-</span>'}</td>
+          <td>${row.nikkei?.squeezeAlert || row.topix?.squeezeAlert ? '<span class="badge signal">警戒</span>' : '<span class="badge ok">-</span>'}</td>
+          <td>${row.nikkei ? row.nikkei.ddCount : '-'}</td>
+          <td>${row.topix ? row.topix.ddCount : '-'}</td>
+        </tr>
+      `}).join('');
+    }
+
+    function renderBacktest() {
+      els.backtestTable.innerHTML = state.backtests.map(test => `
+        <tr class="${test.hit ? 'dd-row' : ''}">
+          <td>${test.dateText}</td>
+          <td>${marketLabel(test.market)}</td>
+          <td>${test.ddCount}</td>
+          <td>${formatNumber(test.close)}</td>
+          <td>${formatNumber(test.minClose)}</td>
+          <td>${formatPct(test.maxDrop)}</td>
+          <td>${test.hit ? '<span class="badge dd">的中</span>' : '<span class="badge ok">未達</span>'}</td>
+        </tr>
+      `).join('');
+
+      const hits = state.backtests.filter(test => test.hit).length;
+      const misses = state.backtests.length - hits;
+      const avgDrop = state.backtests.length ? average(state.backtests.map(test => test.maxDrop)) : 0;
+      els.backtestSummary.innerHTML = `
+        <li><span>シグナル数</span><strong>${state.backtests.length}</strong></li>
+        <li><span>的中数</span><strong>${hits}</strong></li>
+        <li><span>未達数</span><strong>${misses}</strong></li>
+        <li><span>平均最大下落率</span><strong>${formatPct(avgDrop)}</strong></li>
+        <li><span>判定条件</span><strong>${options().forwardDays}営業日以内 / ${formatPct(options().crashThreshold)}</strong></li>
+      `;
+
+      destroyChart('backtestChart');
+      if (!window.Chart) return;
+      state.backtestChart = new Chart(document.getElementById('backtestChart'), {
+        type: 'doughnut',
+        data: { labels: ['的中', '未達'], datasets: [{ data: [hits, misses], backgroundColor: ['#ff5c7a', '#303846'], borderWidth: 0 }] },
+        options: chartOptions({ cutout: '62%' })
+      });
+    }
+
+    function renderSummary() {
+      const markets = groupBy(state.rows, row => row.market);
+      const items = ['nikkei', 'topix'].map(market => {
+        const rows = markets.get(market) || [];
+        const latest = rows.at(-1);
+        const dd = rows.filter(row => row.isDistributionDay).length;
+        const squeezeAlerts = rows.filter(row => row.squeezeAlert).length;
+        return { market, rows, latest, dd, squeezeAlerts };
+      });
+
+      // Render risk meter
+      const latestNikkei = items.find(i => i.market === 'nikkei')?.latest;
+      const latestTopix = items.find(i => i.market === 'topix')?.latest;
+      const maxRisk = Math.max(
+        latestNikkei ? latestNikkei.ddCount : 0,
+        latestTopix ? latestTopix.ddCount : 0
+      );
+      const riskLevel = getRiskLevel(maxRisk, options().warningCount, options().dangerCount);
+      const riskMeterHtml = renderRiskMeter(maxRisk, riskLevel, options().dangerCount);
+      document.getElementById('riskMeterContainer').innerHTML = riskMeterHtml;
+
+      // Build summary items
+      let summaryHtml = items.map(item => `
+        <li><span>${marketLabel(item.market)} データ件数</span><strong>${item.rows.length}</strong></li>
+        <li><span>${marketLabel(item.market)} D-Day発生日数</span><strong>${item.dd}</strong></li>
+        <li><span>${marketLabel(item.market)} 踏み上げ警戒回数</span><strong>${item.squeezeAlerts}</strong></li>
+        <li><span>${marketLabel(item.market)} 直近累積DD</span><strong>${item.latest ? item.latest.ddCount : '-'}</strong></li>
+        <li><span>${marketLabel(item.market)} 直近リスク</span><strong>${item.latest ? item.latest.risk.label : '-'}</strong></li>
+      `).join('') + `<li><span>同時D-Day回数</span><strong>${state.simultaneousDates.size}</strong></li>`;
+      
+      if (state.hasNikkeiVI && latestNikkei) {
+        summaryHtml += `<li><span>日経VI</span><strong>${formatNumber(latestNikkei.nikkeiVI)}</strong></li>`;
+      }
+      if (state.hasVIX && latestTopix) {
+        summaryHtml += `<li><span>米国VIX</span><strong>${formatNumber(latestTopix.vix)}</strong></li>`;
+      }
+      if (state.hasADR && latestNikkei) {
+        summaryHtml += `<li><span>騰落レシオ</span><strong>${formatNumber(latestNikkei.adr)}</strong></li>`;
+      }
+      
+      const crashAlert = calculateCrashAlert(latestNikkei, latestTopix);
+      if (crashAlert.active) {
+        summaryHtml += `<li><span>暴落警戒状態</span><strong style="color: #ff5c7a;">🚨 警戒中</strong></li>`;
+      }
+      
+      els.summaryList.innerHTML = summaryHtml;
+
+      destroyChart('ddChart');
+      if (!window.Chart || !state.rows.length) return;
+      state.ddChart = new Chart(document.getElementById('ddChart'), {
+        type: 'bar',
+        data: {
+          labels: items.map(item => marketLabel(item.market)).concat('同時D-Day'),
+          datasets: [
+            { label: 'D-Day発生日数', data: items.map(item => item.dd).concat(state.simultaneousDates.size), backgroundColor: ['#35b6ff', '#ff9f43', '#b36bff'] },
+            { label: '直近累積DD', data: items.map(item => item.latest ? item.latest.ddCount : 0).concat(0), backgroundColor: ['rgba(53,182,255,.45)', 'rgba(255,159,67,.45)', 'rgba(179,107,255,.45)'] }
+          ]
+        },
+        options: chartOptions({
+          scales: {
+            y: { beginAtZero: true, grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#aab4c2', precision: 0 } },
+            x: { grid: { display: false }, ticks: { color: '#aab4c2' } }
+          }
+        })
+      });
+
+      renderCumulativeDdChart();
+    }
+
+    function getRiskLevel(count, warning, danger) {
+      if (count >= danger) return { key: 'critical', label: '危険', className: 'critical', icon: '●' };
+      if (count >= warning) return { key: 'high', label: '警戒', className: 'high', icon: '◆' };
+      if (count >= Math.max(2, warning - 1)) return { key: 'mid', label: '注意', className: 'mid', icon: '■' };
+      return { key: 'low', label: '平常', className: 'low', icon: '◇' };
+    }
+
+    function renderRiskMeter(count, level, dangerCount) {
+      const segments = 7;
+      const filled = Math.min(count, segments);
+      let segmentHtml = '';
+      for (let i = 0; i < segments; i++) {
+        let color = 'green';
+        if (i >= 5) color = 'red';
+        else if (i >= 3) color = 'orange';
+        else if (i >= 2) color = 'yellow';
+        const opacity = i < filled ? '1' : '0.2';
+        segmentHtml += `<div class="meter-segment ${color}" style="opacity:${opacity}"></div>`;
+      }
+      return `
+        <div class="risk-meter">
+          <div class="meter-bar">${segmentHtml}</div>
+          <div class="meter-label ${level.className}">${level.icon} ${level.label}</div>
+        </div>
+      `;
+    }
+
+    function renderCumulativeDdChart() {
+      destroyChart('cumulativeDdChart');
+      if (!state.rows.length || !window.Chart) return;
+
+      const dates = [...new Set(state.rows.map(row => row.dateText))].sort();
+      const rowsByMarketDate = new Map(state.rows.map(row => [`${row.market}:${row.dateText}`, row]));
+      
+      let nikkeiCumulative = 0;
+      let topixCumulative = 0;
+      let simultaneousCumulative = 0;
+
+      const nikkeiCumulativeData = [];
+      const topixCumulativeData = [];
+      const simultaneousCumulativeData = [];
+
+      dates.forEach(date => {
+        const nikkei = rowsByMarketDate.get(`nikkei:${date}`);
+        const topix = rowsByMarketDate.get(`topix:${date}`);
+
+        if (nikkei?.isDistributionDay) nikkeiCumulative++;
+        if (topix?.isDistributionDay) topixCumulative++;
+        if (nikkei?.isSimultaneousDay && topix?.isSimultaneousDay) simultaneousCumulative++;
+
+        nikkeiCumulativeData.push(nikkeiCumulative);
+        topixCumulativeData.push(topixCumulative);
+        simultaneousCumulativeData.push(simultaneousCumulative);
+      });
+
+      state.cumulativeDdChart = new Chart(document.getElementById('cumulativeDdChart'), {
+        type: 'line',
+        data: {
+          labels: dates,
+          datasets: [
+            { label: 'Nikkei DD累積', data: nikkeiCumulativeData, borderColor: '#35b6ff', backgroundColor: 'rgba(53,182,255,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0 },
+            { label: 'TOPIX DD累積', data: topixCumulativeData, borderColor: '#ff9f43', backgroundColor: 'rgba(255,159,67,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0 },
+            { label: '同時DD累積', data: simultaneousCumulativeData, borderColor: '#b36bff', backgroundColor: 'rgba(179,107,255,.12)', borderWidth: 2, tension: 0.2, fill: false, pointRadius: 0 }
+          ]
+        },
+        options: chartOptions({
+          scales: {
+            y: { beginAtZero: true, grid: { color: 'rgba(48,56,70,.75)' }, ticks: { color: '#aab4c2', precision: 0 }, title: { display: true, text: '累積DD数', color: '#aab4c2' } },
+            x: { grid: { color: 'rgba(48,56,70,.38)' }, ticks: { color: '#aab4c2', maxRotation: 0, autoSkip: true, maxTicksLimit: 9 } }
+          }
+        })
+      });
+    }
+
+    function chartOptions(extra = {}) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { 
+            labels: { 
+              color: '#eef2f8', 
+              boxWidth: 12, 
+              boxHeight: 12,
+              padding: 15,
+              usePointStyle: true
+            },
+            position: 'bottom'
+          },
+          tooltip: { backgroundColor: '#11161d', borderColor: '#303846', borderWidth: 1, titleColor: '#eef2f8', bodyColor: '#dbe3ef' },
+          backgroundColorPlugin: {
+            crashAlerts: extra.crashAlerts || []
+          }
+        },
+        ...extra
+      };
+    }
+
+    // チャート背景色変更プラグイン
+    const backgroundColorPlugin = {
+      id: 'backgroundColorPlugin',
+      beforeDraw: (chart) => {
+        const { ctx, chartArea: { left, top, width, height }, scales: { x } } = chart;
+        const crashAlerts = chart.options.plugins.backgroundColorPlugin.crashAlerts;
+        
+        crashAlerts.forEach(alert => {
+          const index = chart.data.labels.indexOf(alert.date);
+          if (index === -1) return;
+          const xPos = x.getPixelForValue(index);
+          const barWidth = x.getPixelForValue(index + 1) - xPos;
+          
+          ctx.save();
+          ctx.globalAlpha = 0.1;
+          if (alert.level === 'red') ctx.fillStyle = '#ff5c7a';
+          else if (alert.level === 'orange') ctx.fillStyle = '#ff9f43';
+          else if (alert.level === 'yellow') ctx.fillStyle = '#ffc857';
+          ctx.fillRect(xPos - barWidth / 2, top, barWidth, height);
+          ctx.restore();
+        });
+      }
+    };
+
+    // Chart.jsにプラグイン登録
+    if (window.Chart) {
+      Chart.register(backgroundColorPlugin);
+    }
+
+    function destroyChart(name) {
+      console.log('destroyChart called for:', name);
+      if (state[name]) {
+        state[name].destroy();
+        state[name] = null;
+      }
+    }
+
+    function average(values) {
+      return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+    }
+
+    function formatNumber(value) {
+      if (!Number.isFinite(value)) return '-';
+      return new Intl.NumberFormat('ja-JP', { maximumFractionDigits: value >= 100 ? 0 : 2 }).format(value);
+    }
+
+    function formatPct(value) {
+      if (!Number.isFinite(value)) return '-';
+      return `${value.toFixed(2)}%`;
+    }
+
+    function formatVolume(value) {
+      if (!Number.isFinite(value)) return '';
+      if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+      if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
+      return value.toString();
+    }
+
+    function getVolumeLabelColor(volume, prevVolume, isDD) {
+      if (!Number.isFinite(volume) || !Number.isFinite(prevVolume)) return '#aab4c2';
+      const ratio = volume / prevVolume;
+      if (ratio >= 3) return '#b36bff'; // 紫
+      if (ratio >= 2) return '#ff5c7a'; // 赤
+      if (ratio >= 1.5) return '#ffc857'; // 黄
+      if (isDD) return '#ff5c7a'; // DD時は赤
+      return '#aab4c2'; // 通常
+    }
+
+    function getVolumeLabelStyle(volume, prevVolume, isDD, isMobile) {
+      const ratio = Number.isFinite(volume) && Number.isFinite(prevVolume) ? volume / prevVolume : 1;
+      const isHighVolume = ratio >= 1.5;
+      const isDDOrHigh = isDD || isHighVolume;
+      
+      return {
+        color: getVolumeLabelColor(volume, prevVolume, isDD),
+        font: {
+          size: isDDOrHigh ? (isMobile ? 10 : 12) : (isMobile ? 8 : 10),
+          weight: isDDOrHigh ? 'bold' : 'normal'
+        },
+        textShadow: isDDOrHigh ? '0 0 4px rgba(255, 92, 122, 0.8)' : 'none'
+      };
+    }
+
+    function showError(message) {
+      els.errorBox.textContent = message;
+      els.errorBox.style.display = 'block';
+    }
+
+    function hideError() {
+      els.errorBox.textContent = '';
+      els.errorBox.style.display = 'none';
+    }
+
+    function showLoading(message = 'CSVを解析中...') {
+      els.loadingBox.textContent = message;
+      els.loadingBox.classList.add('show');
+    }
+
+    function hideLoading() {
+      els.loadingBox.classList.remove('show');
+    }
+
+    async function handleFile(file) {
+      try {
+        hideError();
+        showLoading();
+        const rows = parseCsv(await file.text());
+        if (!rows.length) throw new Error('有効なデータ行がありません。market は Nikkei または TOPIX を指定してください。');
+        state.rawRows = rows;
+        analyze();
+      } catch (error) {
+        showError(error.message || String(error));
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function loadCsvFromUrl(url) {
+      try {
+        hideError();
+        showLoading('URLからCSVを読み込み中...');
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        const rows = parseCsv(text);
+        if (!rows.length) throw new Error('有効なデータ行がありません。');
+        state.rawRows = rows;
+        analyze();
+      } catch (error) {
+        showError(`URL読込エラー: ${error.message}`);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function loadGoogleSheetsUrl(sheetUrl) {
+      if (!sheetUrl.includes('/spreadsheets/')) {
+        showError('Google SheetsのURL形式が無効です。');
+        return;
+      }
+      const sheetId = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1];
+      const gid = sheetUrl.match(/[#&]gid=([0-9]+)/)?.[1] || '0';
+      if (!sheetId) {
+        showError('Google SheetsのシートIDを抽出できません。');
+        return;
+      }
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+      loadCsvFromUrl(csvUrl);
+    }
+
+    function loadSample() {
+      console.log('loadSample called');
+      showLoading('サンプルデータを生成中...');
+      try {
+        state.rawRows = parseCsv(buildSampleCsv());
+        analyze();
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function startAutoUpdate(csvUrl) {
+      if (state.autoUpdateInterval) {
+        clearInterval(state.autoUpdateInterval);
+      }
+      state.autoUpdateInterval = setInterval(() => {
+        loadCsvFromUrl(csvUrl);
+      }, 30000); // 30秒ごと
+    }
+
+    function buildSampleCsv() {
+      const lines = ['date,market,open,high,low,close,volume,NikkeiVI,VIX,AdvanceDeclineRatio'];
+      const nikkeiData = { base: 40200, volume: 78000, swing: 170 };
+      const topixData = { base: 2860, volume: 62000, swing: 13 };
+      
+      let nikkeiClose = nikkeiData.base, nikkeiVolume = nikkeiData.volume, nikkeiVI = 16, adr = 80;
+      let topixClose = topixData.base, topixVolume = topixData.volume, vix = 18;
+      
+      for (let i = 0; i < 90; i++) {
+        const date = businessDateFrom(new Date(2025, 9, 1), i);
+        const isShock = [18, 23, 31, 38, 45, 59, 66].includes(i);
+        const shockFactor = isShock ? -1.8 : 0;
+        
+        // Nikkei
+        {
+          const shock = shockFactor * nikkeiData.swing;
+          const drift = Math.sin(i / 5) * nikkeiData.swing * .35 + (i % 11 === 0 ? -nikkeiData.swing * .6 : nikkeiData.swing * .18);
+          const prev = nikkeiClose;
+          nikkeiClose = Math.max(nikkeiData.base * .75, nikkeiClose + drift + shock);
+          const high = Math.max(prev, nikkeiClose) + nikkeiData.swing * .55;
+          const low = Math.min(prev, nikkeiClose) - nikkeiData.swing * .55;
+          nikkeiVolume = Math.max(1000, nikkeiVolume + (shock < 0 ? nikkeiData.volume * .18 : Math.sin(i / 3) * nikkeiData.volume * .03));
+          nikkeiVI = Math.max(12, nikkeiVI + (shock < 0 ? 3 : Math.sin(i / 4) * -0.5));
+          adr = Math.max(50, Math.min(100, adr + (shock < 0 ? -5 : Math.sin(i / 6) * 1)));
+          lines.push(`${formatDate(date)},Nikkei,${Math.round(prev)},${Math.round(high)},${Math.round(low)},${Math.round(nikkeiClose)},${Math.round(nikkeiVolume)},${Math.round(nikkeiVI)},,${Math.round(adr)}`);
+        }
+        
+        // TOPIX
+        {
+          const shock = shockFactor * topixData.swing * 0.8;
+          const drift = Math.sin(i / 5) * topixData.swing * .35 + (i % 11 === 0 ? -topixData.swing * .6 : topixData.swing * .18);
+          const prev = topixClose;
+          topixClose = Math.max(topixData.base * .75, topixClose + drift + shock);
+          const high = Math.max(prev, topixClose) + topixData.swing * .55;
+          const low = Math.min(prev, topixClose) - topixData.swing * .55;
+          topixVolume = Math.max(1000, topixVolume + (shock < 0 ? topixData.volume * .18 : Math.sin(i / 3) * topixData.volume * .03));
+          vix = Math.max(14, vix + (shock < 0 ? 2.5 : Math.sin(i / 4) * -0.4));
+          lines.push(`${formatDate(date)},TOPIX,${Math.round(prev)},${Math.round(high)},${Math.round(low)},${Math.round(topixClose)},${Math.round(topixVolume)},,${Math.round(vix)},`);
+        }
+      }
+      
+      return lines.join('\n');
+    }
+
+    function businessDateFrom(startDate, offset) {
+      const date = new Date(startDate);
+      let added = 0;
+      while (added < offset) {
+        date.setDate(date.getDate() + 1);
+        if (date.getDay() !== 0 && date.getDay() !== 6) added++;
+      }
+      return date;
+    }
+
+    function resetUi() {
+      state.rawRows = [];
+      state.rows = [];
+      state.backtests = [];
+      state.simultaneousDates = new Set();
+      state.hasNikkeiVI = false;
+      state.hasVIX = false;
+      state.hasADR = false;
+      destroyChart('combinedChart');
+      destroyChart('nikkeiChart');
+      destroyChart('nikkeiVolumeChart');
+      destroyChart('topixChart');
+      destroyChart('topixVolumeChart');
+      destroyChart('backtestChart');
+      destroyChart('ddChart');
+      destroyChart('cumulativeDdChart');
+      destroyChart('viChart');
+      if (state.autoUpdateInterval) {
+        clearInterval(state.autoUpdateInterval);
+        state.autoUpdateInterval = null;
+      }
+      els.fileInput.value = '';
+      hideError();
+      render();
+      els.signalsTable.innerHTML = '';
+      els.backtestTable.innerHTML = '';
+      els.backtestSummary.innerHTML = '';
+      els.summaryList.innerHTML = '';
+      document.getElementById('riskMeterContainer').innerHTML = '';
+    }
+
+    els.fileInput.addEventListener('change', event => {
+      const file = event.target.files[0];
+      if (file) {
+        handleFile(file);
+        event.target.value = '';
+      }
+    });
+
+    ['dragenter', 'dragover'].forEach(type => {
+      els.dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(type => {
+      els.dropzone.addEventListener(type, event => {
+        event.preventDefault();
+        els.dropzone.classList.remove('dragover');
+      });
+    });
+
+    els.dropzone.addEventListener('drop', event => {
+      const file = event.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    [els.marketSelect, els.dropThreshold, els.lookbackDays, els.warningCount, els.dangerCount, els.forwardDays, els.crashThreshold, els.volumeLabelsEnabled]
+      .forEach(input => input.addEventListener('change', () => {
+        if (state.rawRows.length) analyze();
+      }));
+
+    els.sampleBtn.addEventListener('click', loadSample);
+    els.reanalyzeBtn.addEventListener('click', () => state.rawRows.length ? analyze() : showError('先にCSVを読み込むか、サンプルを読み込んでください。'));
+    els.clearBtn.addEventListener('click', resetUi);
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(item => item.classList.remove('active'));
+        tab.classList.add('active');
+        const selected = tab.dataset.tab;
+        document.getElementById('signalsPane').hidden = selected !== 'signals';
+        document.getElementById('backtestPane').hidden = selected !== 'backtest';
+        document.getElementById('summaryPane').hidden = selected !== 'summary';
+        setTimeout(() => {
+          if (state.backtestChart) state.backtestChart.resize();
+          if (state.volumeChart) state.volumeChart.resize();
+          if (state.ddChart) state.ddChart.resize();
+          if (state.cumulativeDdChart) state.cumulativeDdChart.resize();
+          if (state.viChart) state.viChart.resize();
+        }, 0);
+      });
+    });
+
+    render();
+  </script>
+</body>
+</html>

@@ -621,11 +621,7 @@
   </main>
 
   <script>
-    fetch("https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.csv")
-.then(res => res.text())
-.then(csv => {
-    parseCSV(csv);
-});
+  
     // Register Chart.js plugins
     Chart.register(ChartDataLabels);
     const state = {
@@ -773,7 +769,11 @@
       if (wideRows.length) return wideRows;
       throw new Error('必須列を検出できません。date, market, close を含む縦持ちCSV、または Nikkei_Fut_Close / TOPIX_Close を含む横持ちCSVを指定してください。');
     }
-
+fetch("https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.csv")
+.then(res => res.text())
+.then(csv => {
+    parseCSV(csv);
+});
     function parseLongCsv(records, cols) {
       return records.map(row => {
         const date = parseDate(row[cols.date]);

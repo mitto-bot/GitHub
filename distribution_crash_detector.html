@@ -15,6 +15,7 @@
       --line: #303846;
       --text: #eef2f8;
       --muted: #aab4c2;
+
       --soft: #768296;
       --blue: #35b6ff;
       --orange: #ff9f43;
@@ -620,6 +621,11 @@
   </main>
 
   <script>
+    fetch("https://raw.githubusercontent.com/mitto-bot/GitHub/refs/heads/main/%E3%83%86%E3%82%B9%E3%83%88%E7%94%A8CSV%E3%82%B7%E3%83%BC%E3%83%88(%E6%94%B9)%20-%20Prices.csv")
+  .then(res => res.text())
+  .then(csv => {
+      parseCSV(csv);
+  });
     // Register Chart.js plugins
     Chart.register(ChartDataLabels);
     const state = {

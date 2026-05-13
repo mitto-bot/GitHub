@@ -2016,6 +2016,7 @@
       els.fileInput.value = '';
       hideError();
       render();
+      
       els.signalsTable.innerHTML = '';
       els.backtestTable.innerHTML = '';
       els.backtestSummary.innerHTML = '';
@@ -2078,12 +2079,7 @@
     });
 
     render();
- fetch("https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.csv")
-.then(res => res.text())
-.then(csv => {
-   state.rawRows = parseCSV(csv);
-analyze();
-});
+loadCsvFromUrl('https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.csv');
  </script>
 </body>
 </html>

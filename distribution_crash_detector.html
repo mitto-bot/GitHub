@@ -2081,8 +2081,8 @@
  fetch("https://raw.githubusercontent.com/mitto-bot/GitHub/main/Prices.csv")
 .then(res => res.text())
 .then(csv => {
-   parseCsv(csv);
-});
+   state.rawRows = parseCSV(csv);
+analyze();;
  </script>
 </body>
 </html>
